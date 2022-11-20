@@ -1,0 +1,93 @@
+#this program takes screenshots easily with TKinter button (GUI) or press "shift & return" (enter)
+
+import os
+
+import PIL
+
+from PIL import ImageGrab
+import tkinter as tk
+from tkinter import ttk
+
+
+path_to_dl = "C:\CAFJOD1.4"   #where is stuff being dl'ed to, replace with where you want to go   flying010 last one
+
+
+try:    
+    os.mkdir(path_to_dl)      #used to make directory if required, delete if already exists
+except FileExistsError:     
+    pass
+
+os.chdir(path_to_dl)
+print(os.getcwd(), '  <-- files are going here')
+
+
+
+def do_all_this(aaa=1):
+    ss_region = (0, 0, 2560, 1440)  #set monitor parameters for screenshot
+    ss_img = ImageGrab.grab(ss_region)
+    aaa = 2
+    counter = 0
+
+    with open('readme.txt', 'a') as textfile001:
+        textfile001.write('a')
+
+    with open('readme.txt', 'r') as textfile002:
+        length001 = len(textfile002.read())
+
+    
+    counter = length001
+    print(f"{counter:04d}")
+
+    ss_img.save(f"{counter:04d}.jpg")
+
+
+    exit_button.config(text=f"{counter:04d}")
+
+
+
+
+root = tk.Tk()
+root.geometry('700x500')
+greeting = tk.Label(text="Screenshot taker")
+
+alternator = True
+
+
+s001 = ttk.Style()
+s001.configure('my.TButton', font=('Helvetica', 180))
+
+
+exit_button = ttk.Button(
+    root,
+    text=str('shot'),
+    style='my.TButton',
+    command=do_all_this
+)
+
+
+
+
+root.bind('<Shift-Return>', do_all_this)
+
+
+exit_button.pack(
+    ipadx=275,
+    ipady=275,
+    expand=True
+)
+
+
+
+root.mainloop()
+
+
+
+
+
+'''
+Instructions:  
+
+install pillow using pip install
+
+
+'''
