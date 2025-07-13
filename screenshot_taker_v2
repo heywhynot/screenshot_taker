@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 
 
-path_to_dl = "C:\folder_of_images"   #where is stuff being dl'ed to, replace with where you want to go   flying010 last one
+path_to_dl = r"C:\folder_of_images"   #where is stuff being dl'ed to, replace with where you want to go   flying010 last one
 
 
 try:    
