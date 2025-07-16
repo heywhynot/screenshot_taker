@@ -1,0 +1,203 @@
+# ==============================================================================
+#                      Ultimate Screenshot Tool - Help
+# ==============================================================================
+#
+# PURPOSE:
+#   This script creates a graphical user interface (GUI) to take, name,
+#   and manage screenshots with advanced options.
+#
+# DEPENDENCIES:
+#   This script requires one external library: Pillow.
+#   The 'tkinter' library is part of Python's standard library and does not
+#   need to be installed separately.
+#
+# HOW TO INSTALL THE DEPENDENCY:
+#   1. Open your terminal or command prompt.
+#   2. Type the following command and press Enter:
+#
+#      pip install Pillow
+#
+#   3. Once the installation is complete, you can run this script without any
+#      issues.
+#
+# ==============================================================================
+
+import os
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk, simpledialog
+from PIL import ImageGrab
+import json
+import subprocess
+import sys
+
+# --- Constants ---
+DEFAULT_LEFT, DEFAULT_TOP, DEFAULT_WIDTH, DEFAULT_HEIGHT = 0, 0, 2560, 1440
+IMAGE_FORMAT = ".jpg"
+CONFIG_FILE = "screenshot_app_config.json"
+
+class ScreenshotApp:
+    def __init__(self, master):
+        """Initialize the screenshot application."""
+        self.master = master
+        self.output_path = tk.StringVar()
+        self.prefix = tk.StringVar()
+        self.suffix = tk.StringVar()
+        self.left_coord, self.top_coord = tk.IntVar(), tk.IntVar()
+        self.width_coord, self.height_coord = tk.IntVar(), tk.IntVar()
+        self.screenshot_counter = 1
+
+        self._configure_window()
+        self._load_config()
+        self._create_widgets()
+        self._bind_hotkeys()
+        self.update_counter()
+
+    def _configure_window(self):
+        """Set up the main window properties."""
+        self.master.title("Ultimate Screenshot Tool")
+        self.master.geometry("700x620")
+        self.master.minsize(600, 550)
+        self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def _create_widgets(self):
+        """Create and arrange all the UI elements in the window."""
+        s = ttk.Style()
+        s.configure('TButton', font=('Helvetica', 10))
+        s.configure('Huge.TButton', font=('Helvetica', 28, 'bold'), wraplength=500, justify='center')
+
+        # --- Folder Selection Frame ---
+        top_frame = ttk.LabelFrame(self.master, text="Output Location", padding="10")
+        top_frame.pack(fill=tk.X, padx=10, pady=5)
+        top_frame.columnconfigure(0, weight=1)
+        self.path_entry = ttk.Entry(top_frame, textvariable=self.output_path)
+        self.path_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        ttk.Button(top_frame, text="Browse...", command=self.select_folder).grid(row=0, column=1, padx=5)
+        ttk.Button(top_frame, text="Open Folder", command=self.open_output_folder).grid(row=0, column=2)
+
+        # --- Naming Options Frame ---
+        naming_frame = ttk.LabelFrame(self.master, text="File Naming Options", padding="10")
+        naming_frame.pack(fill=tk.X, padx=10, pady=5)
+        naming_frame.columnconfigure(1, weight=1)
+        ttk.Label(naming_frame, text="Prefix:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        self.prefix_entry = ttk.Entry(naming_frame, textvariable=self.prefix)
+        self.prefix_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        ttk.Label(naming_frame, text="Suffix:").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.suffix_entry = ttk.Entry(naming_frame, textvariable=self.suffix)
+        self.suffix_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        
+        # --- Counter Control Buttons ---
+        ttk.Button(naming_frame, text="Reset to 1", command=self.reset_counter).grid(row=0, column=2, padx=(10, 5), sticky="ew")
+        ttk.Button(naming_frame, text="Set Counter", command=self.set_counter).grid(row=1, column=2, padx=(10, 5), sticky="ew")
+
+        # --- Screenshot Region Frame ---
+        region_frame = ttk.LabelFrame(self.master, text="Screenshot Region (Coordinates)", padding="10")
+        region_frame.pack(fill=tk.X, padx=10, pady=5)
+        for i in range(4): region_frame.columnconfigure(i*2+1, weight=1)
+        ttk.Label(region_frame, text="Left:").grid(row=0, column=0); ttk.Entry(region_frame, textvariable=self.left_coord, width=8).grid(row=0, column=1)
+        ttk.Label(region_frame, text="Top:").grid(row=0, column=2); ttk.Entry(region_frame, textvariable=self.top_coord, width=8).grid(row=0, column=3)
+        ttk.Label(region_frame, text="Width:").grid(row=0, column=4); ttk.Entry(region_frame, textvariable=self.width_coord, width=8).grid(row=0, column=5)
+        ttk.Label(region_frame, text="Height:").grid(row=0, column=6); ttk.Entry(region_frame, textvariable=self.height_coord, width=8).grid(row=0, column=7)
+
+        # --- Main Button & Status Bar ---
+        center_frame = ttk.Frame(self.master); center_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.screenshot_button = ttk.Button(center_frame, style='Huge.TButton', command=self.take_screenshot)
+        self.screenshot_button.pack(fill=tk.BOTH, expand=True)
+        bottom_frame = ttk.Frame(self.master, padding="5"); bottom_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        self.status_label = ttk.Label(bottom_frame, text="Welcome!"); self.status_label.pack(side=tk.LEFT)
+
+    def _bind_hotkeys(self):
+        self.master.bind('<Shift-Return>', self.take_screenshot)
+        self.path_entry.bind('<Return>', lambda e: self.update_counter())
+        self.prefix_entry.bind('<KeyRelease>', lambda e: self.update_ui_text())
+        self.suffix_entry.bind('<KeyRelease>', lambda e: self.update_ui_text())
+
+    def _load_config(self):
+        try:
+            with open(CONFIG_FILE, 'r') as f: config = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError): config = {}
+        self.output_path.set(config.get("path", os.path.join(os.path.expanduser("~"), "Screenshots")))
+        self.prefix.set(config.get("prefix", "")); self.suffix.set(config.get("suffix", ""))
+        region = config.get("region", {})
+        self.left_coord.set(region.get("left", DEFAULT_LEFT)); self.top_coord.set(region.get("top", DEFAULT_TOP))
+        self.width_coord.set(region.get("width", DEFAULT_WIDTH)); self.height_coord.set(region.get("height", DEFAULT_HEIGHT))
+
+    def _save_config(self):
+        config = {
+            "path": self.output_path.get(), "prefix": self.prefix.get(), "suffix": self.suffix.get(),
+            "region": { "left": self.left_coord.get(), "top": self.top_coord.get(), "width": self.width_coord.get(), "height": self.height_coord.get() }
+        }
+        try:
+            with open(CONFIG_FILE, 'w') as f: json.dump(config, f, indent=4)
+        except IOError as e: print(f"Error saving config file: {e}")
+
+    def open_output_folder(self):
+        path = self.output_path.get()
+        if not os.path.isdir(path):
+            messagebox.showwarning("Folder Not Found", f"The folder '{path}' does not exist yet. Take a screenshot to create it."); return
+        try:
+            if sys.platform == "win32": os.startfile(path)
+            elif sys.platform == "darwin": subprocess.run(["open", path])
+            else: subprocess.run(["xdg-open", path])
+        except Exception as e: messagebox.showerror("Error", f"Could not open folder:\n{e}")
+
+    def select_folder(self):
+        folder = filedialog.askdirectory(initialdir=self.output_path.get())
+        if folder: self.output_path.set(folder); self.update_counter()
+
+    def update_counter(self):
+        path, max_num = self.output_path.get(), 0
+        if os.path.isdir(path):
+            prefix_val, suffix_val = self.prefix.get().lower(), self.suffix.get().lower()
+            for f in os.listdir(path):
+                f_lower = f.lower()
+                if f_lower.startswith(prefix_val) and f_lower.endswith(suffix_val + IMAGE_FORMAT.lower()):
+                    start, end = len(prefix_val), len(f_lower) - len(suffix_val + IMAGE_FORMAT.lower())
+                    if f_lower[start:end].isdigit(): max_num = max(max_num, int(f_lower[start:end]))
+        self.screenshot_counter = max_num + 1
+        self.update_ui_text()
+
+    def update_ui_text(self):
+        base_filename = self.get_next_filename(with_extension=False)
+        self.screenshot_button.config(text=f"Take Screenshot\n{base_filename}")
+        self.status_label.config(text=f"Next File: {base_filename}{IMAGE_FORMAT}")
+
+    def get_next_filename(self, with_extension=True):
+        base = f"{self.prefix.get()}{self.screenshot_counter:04d}{self.suffix.get()}"
+        return f"{base}{IMAGE_FORMAT}" if with_extension else base
+
+    def reset_counter(self):
+        self.screenshot_counter = 1
+        self.update_ui_text()
+        self.status_label.config(text="Counter has been reset to 1.")
+
+    def set_counter(self):
+        new_num = simpledialog.askinteger(
+            "Set Screenshot Counter", "Enter the next screenshot number:",
+            parent=self.master, minvalue=1, initialvalue=self.screenshot_counter
+        )
+        if new_num is not None:
+            self.screenshot_counter = new_num
+            self.update_ui_text()
+            self.status_label.config(text=f"Counter has been set to {self.screenshot_counter}.")
+
+    def take_screenshot(self, event=None):
+        path = self.output_path.get()
+        if not path: messagebox.showerror("Error", "Please specify an output folder."); return
+        try:
+            left, top, width, height = self.left_coord.get(), self.top_coord.get(), self.width_coord.get(), self.height_coord.get()
+            if width <= 0 or height <= 0: messagebox.showerror("Invalid Region", "Width and Height must be positive."); return
+            os.makedirs(path, exist_ok=True)
+            full_path = os.path.join(path, self.get_next_filename())
+            ImageGrab.grab(bbox=(left, top, left + width, top + height)).save(full_path)
+            self.screenshot_counter += 1
+            self.update_ui_text()
+        except tk.TclError: messagebox.showerror("Invalid Input", "Coordinates must be valid integers.")
+        except Exception as e: messagebox.showerror("Error", f"Failed to save screenshot:\n{e}")
+
+    def on_closing(self):
+        self._save_config(); self.master.destroy()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ScreenshotApp(root)
+    root.mainloop()
